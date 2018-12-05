@@ -1,0 +1,29 @@
+15a16
+> void *go_doit(void *connfdp);
+54,55c55,62
+<       doit(connfd);
+<       Close(connfd);
+---
+>       {
+>         int *connfdp;
+>         pthread_t th;
+>         connfdp = malloc(sizeof(int));
+>         *connfdp = connfd;
+>         Pthread_create(&th, NULL, go_doit, connfdp);
+>         Pthread_detach(th);
+>       }
+59a67,75
+> void *go_doit(void *connfdp)
+> {
+>   int connfd = *(int *)connfdp;
+>   free(connfdp);
+>   doit(connfd);
+>   Close(connfd);
+>   return NULL;
+> }
+> 
+185a202
+>   
+211a229,230
+>   Sleep(30);
+> 

@@ -1,0 +1,21 @@
+202c202
+<   char *body, *header;
+---
+>   char *body, *header, *x, *y, *sum;
+204c204,214
+<   body = "79\n";
+---
+>   x = dictionary_get(query, "x");
+>   y = dictionary_get(query, "y");
+>   if (!x || !y) {
+>     clienterror(fd, "?", "400", "Bad Request",
+>                 "Please provide numbers");
+>     return;
+>   }
+> 
+>   sum = to_string(atoi(x) + atoi(y));
+>   body = append_strings(sum, "\n", NULL);
+>   free(sum);
+217a228,229
+> 
+>   free(body);

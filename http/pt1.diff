@@ -1,0 +1,31 @@
+21a22
+> static void serve_sum(int fd, dictionary_t *query);
+101c102,105
+<       serve_request(fd, query);
+---
+>       if (starts_with("/sum", uri))
+>         serve_sum(fd, query);
+>       else
+>         serve_request(fd, query);
+193a198,218
+> static void serve_sum(int fd, dictionary_t *query)
+> {
+>   size_t len;
+>   char *body, *header;
+> 
+>   body = "79\n";
+> 
+>   len = strlen(body);
+> 
+>   /* Send response headers to client */
+>   header = ok_header(len, "text/html; charset=utf-8");
+>   Rio_writen(fd, header, strlen(header));
+>   printf("Response headers:\n");
+>   printf("%s", header);
+> 
+>   free(header);
+> 
+>   /* Send response body to client */
+>   Rio_writen(fd, body, len);
+> }
+> 
