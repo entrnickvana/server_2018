@@ -20,11 +20,11 @@ static void clienterror(int fd, char *cause, char *errnum,
                         char *shortmsg, char *longmsg);
 static void print_stringdictionary(dictionary_t *d);
 static void serve_request(int fd, dictionary_t *query);
-int detect_str(dictionary_t *d, char* str);
 static void serve_sum(int fd, dictionary_t *query);
 void *doit_thread(void* connfd_p);
 static void serve_counts(int fd);
 static void serve_pin(int fd, dictionary_t *query);
+static void serve_reset(int fd);
 
 dictionary_t* d_ppl;
 dictionary_t* d_plcs;
@@ -94,27 +94,6 @@ int main(int argc, char **argv)
   /* Also, don't stop on broken connections: */
   /*In the case of a broken pipe which wasn't closed on one end, no error is thrown*/
   Signal(SIGPIPE, SIG_IGN);
-
-/*
-dictionary_t *make_dictionary(int compare_mode, free_proc_t free_value)
-{
-  dictionary_t *d = malloc(sizeof(dictionary_t));
-
-  d->fill_count = 0;
-  d->map_count = 0;
-  d->array_size = 16;
-  d->keys = calloc(d->array_size, sizeof(char *));
-  d->vals = calloc(d->array_size, sizeof(void *));
-  d->is_ci = (compare_mode == COMPARE_CASE_INSENS);
-  d->free_value = free_value;
-
-  return d;
-}
-
-*/
-
-
-
 
   while (1) {
     clientlen = sizeof(clientaddr);
@@ -198,18 +177,18 @@ void doit(int fd)
       printf("______________________________________________\nQUERY:\n-----\n");
       print_stringdictionary(query);
       printf("\n\n\n_____________________________________________\n");
-      printf("COUNT: %zu\n", dictionary_count(query));
+      printf("QUERY COUNT: %zu\n", dictionary_count(query));
 
 
       if(starts_with("/counts", uri))           {if(debug_on)printf("counts\n"); serve_counts(fd);}
-      else if(starts_with("/reset", uri))       {if(debug_on)printf("reset\n"); /*serve_reset(fd, query);*/}
+      else if(starts_with("/reset", uri))       {if(debug_on)printf("reset\n"); serve_reset(fd);}
       else if(starts_with("/people", uri))      {if(debug_on)printf("people\n"); /*serve_people(fd, query);*/}      
       else if(starts_with("/places", uri))      {if(debug_on)printf("places\n"); /*serve_places(fd, query);*/}
       else if(starts_with("/pin", uri))         {if(debug_on)printf("pin\n"); serve_pin(fd, query);}
       else if(starts_with("/unpin", uri))       {if(debug_on)printf("unpin\n"); /*serve_unpin(fd, query);*/}      
       else if(starts_with("/copy", uri))        {if(debug_on)printf("copy\n"); /*serve_copy(fd, query);*/}      
       else if(starts_with("/sum", uri))         {if(debug_on)printf("sum\n"); serve_sum(fd, query);}      
-      else                                      {if(debug_on)printf("8\n"); /*serve_request(fd, query);*/}
+      else                                      {if(debug_on)printf("ERROR\n"); /*serve_request(fd, query);*/}
 
       /* You'll want to handle different queries here,
          but the intial implementation always returns
@@ -290,9 +269,7 @@ static void serve_request(int fd, dictionary_t *query)
 {
   size_t len;
   char *body, *header;
-
-
-
+  
   body = strdup("alice\nbob\n");
 
   len = strlen(body);
@@ -311,18 +288,25 @@ static void serve_request(int fd, dictionary_t *query)
   free(body);
 }
 
+
+static void serve_reset(int fd)
+{
+  dictionary_free(d_ppl);
+  d_ppl = make_dictionary(COMPARE_CASE_SENS, free);
+  serve_counts(fd);
+}
+
+
+
 static void serve_pin(int fd, dictionary_t *query)
 {
   size_t len;
   char *body, *header;
 
+  printf("ENTERED QUERY:\n");
+  print_stringdictionary(query);
 
-  if(d_ppl == NULL){
-    printf("EMPTY DICTIONARY SERV_PIN\n");
-    d_ppl = make_dictionary(COMPARE_CASE_SENS, free);
-  }
-
-  body = strdup("alice\nbob\n");
+  body = "";
 
   len = strlen(body);
 
@@ -337,7 +321,7 @@ static void serve_pin(int fd, dictionary_t *query)
   /* Send response body to client */
   Rio_writen(fd, body, len);
 
-  free(body);
+  //free(body);
 }
 
 static void serve_counts(int fd)
@@ -345,32 +329,25 @@ static void serve_counts(int fd)
   size_t len;
   char *body, *header;
 
-
-
   if(d_ppl == NULL){
     body = strdup(append_strings("0\n0", "\n",NULL));
     printf("NOBODY\n");
   }
 
-
   char* ppl_cnt = strdup(to_string(dictionary_count(d_ppl)));
-  printf("PPL COUNT in counts: %zu\n", dictionary_count(d_ppl));
 
   int places_sum = 0;
 
   int i;
-  printf("STARTING PLACES\n");
   char** keys = (char**)dictionary_keys(d_ppl);
   for(i = 0; keys[i] != NULL; i++){
-    printf("keys %s\n", keys[i]);
+    if(debug_on) printf("keys %s\n", keys[i]);
     if(dictionary_get(d_ppl, keys[i]) != NULL)
     places_sum += dictionary_count(dictionary_get(d_ppl, keys[i]));
   }
 
-  printf("Plcs coount: %i\n", places_sum);
   char* plcs_cnt = strdup(to_string(places_sum));
 
-  printf("PRINTING APPENDED BODY\n");
   body = append_strings(ppl_cnt,"\n", plcs_cnt, "\n", NULL);
   len = strlen(body);
 
@@ -475,28 +452,3 @@ static void print_stringdictionary(dictionary_t *d)
   free(keys);
 }
 
-/*
-int detect_str(dictionary_t *d, char* str)
-{
-  int i;
-  const char **keys;
-
-  keys = dictionary_keys(d);
-  
-  for (i = 0; keys[i] != NULL; i++) {
-  
-    //printf("%s=%s\n",
-    //       keys[i],
-    //       (const char *)dictionary_get(d, keys[i]));
-  
-    if(strcmp(str, keys[i]) == 0)
-      printf("MATCH DETECTED\n");
-    else
-      printf("NO MATCH\n");
-  }
-  printf("\n");
-
-  free(keys);
-}
-
-*/
