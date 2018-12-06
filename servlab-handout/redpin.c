@@ -25,6 +25,8 @@ void *doit_thread(void* connfd_p);
 static void serve_counts(int fd);
 static void serve_pin(int fd, dictionary_t *query);
 static void serve_reset(int fd);
+static void serve_people(int fd, dictionary_t *query);
+static void serve_places(int fd, dictionary_t *query);
 
 dictionary_t* d_ppl;
 dictionary_t* d_plcs;
@@ -45,18 +47,23 @@ int main(int argc, char **argv)
   char* name2 = strdup("bob");
   
   dictionary_t* tmp1 = make_dictionary(COMPARE_CASE_SENS, free);
+  dictionary_t* tmp2 = make_dictionary(COMPARE_CASE_SENS, free);  
 
   /* v FOR TESTING v */
 
   char* tmp1_plcs = strdup("London");
   char* tmp1_plcs2 = strdup("Paris");
+  char* tmp1_plcs3 = strdup("Shanghai");  
   dictionary_set(tmp1, tmp1_plcs, NULL);  
-  dictionary_set(tmp1, tmp1_plcs2, NULL);    
+  dictionary_set(tmp1, tmp1_plcs2, NULL); 
+  dictionary_set(tmp1, tmp1_plcs3, NULL);   
+  dictionary_set(tmp2, tmp1_plcs3, NULL);   
+
   free(tmp1_plcs);
   free(tmp1_plcs2);  
 
   dictionary_set(d_ppl, name1, tmp1);
-  dictionary_set(d_ppl, name2, NULL);
+  dictionary_set(d_ppl, name2, tmp2);
   free(name1);
   free(name2);
 
@@ -182,8 +189,8 @@ void doit(int fd)
 
       if(starts_with("/counts", uri))           {if(debug_on)printf("counts\n"); serve_counts(fd);}
       else if(starts_with("/reset", uri))       {if(debug_on)printf("reset\n"); serve_reset(fd);}
-      else if(starts_with("/people", uri))      {if(debug_on)printf("people\n"); /*serve_people(fd, query);*/}      
-      else if(starts_with("/places", uri))      {if(debug_on)printf("places\n"); /*serve_places(fd, query);*/}
+      else if(starts_with("/people", uri))      {if(debug_on)printf("people\n"); serve_people(fd, query);}      
+      else if(starts_with("/places", uri))      {if(debug_on)printf("places\n"); serve_places(fd, query);}
       else if(starts_with("/pin", uri))         {if(debug_on)printf("pin\n"); serve_pin(fd, query);}
       else if(starts_with("/unpin", uri))       {if(debug_on)printf("unpin\n"); /*serve_unpin(fd, query);*/}      
       else if(starts_with("/copy", uri))        {if(debug_on)printf("copy\n"); /*serve_copy(fd, query);*/}      
@@ -289,14 +296,102 @@ static void serve_request(int fd, dictionary_t *query)
 }
 
 
+static void serve_people(int fd, dictionary_t *query)
+{
+  size_t len;
+  char *body, *header, *full_body;
+  body = "";
+  full_body = "";
+
+  char** keys = (char**)dictionary_keys(d_ppl);
+
+  int i;
+  dictionary_t* place_tmp;
+  char* single_key;
+  if(dictionary_has_key(query, "place"))
+  {
+    printf("ASKED FOR PLACES\n");    
+    place_tmp = (dictionary_t*)dictionary_get(query, "place");
+    single_key = dictionary_keys(query);
+
+
+    keys = (char**)dictionary_keys(d_ppl);
+    for(i = 0; keys[i] != NULL; i++)
+      if(dictionary_get(d_ppl, keys[i]) != NULL)
+        if(dictionary_has_key((dictionary_t*)dictionary_get(d_ppl, keys[i]), (const char*)place_tmp))
+          full_body = append_strings(full_body, keys[i], "\n", NULL);
+
+    len = strlen(full_body);        
+
+    printf("END FOR LOOP!!!!\n");
+
+  }else
+  {
+    full_body = join_strings((const char* const*)keys, '\n');
+    len = strlen(full_body);    
+  }
+
+
+  /* Send response headers to client */
+  header = ok_header(len, "text/plain; charset=utf-8");
+  Rio_writen(fd, header, strlen(header));
+  printf("Response headers:\n");
+  printf("%s", header);
+
+  free(header);
+
+  /* Send response body to client */
+  Rio_writen(fd, full_body, len);
+
+  //free(body);
+}
+
+static void serve_places(int fd, dictionary_t *query)
+{
+  size_t len;
+  char *body, *header, *full_body;
+  body = "";
+  full_body = "";
+
+  print_stringdictionary(query);
+
+  char** places_keys;
+  dictionary_t* temp;
+  int i;
+  char** keys = (char**)dictionary_keys(d_ppl);
+  for(i = 0; keys[i] != NULL; i++){
+    if(debug_on) printf("keys %s\n", keys[i]);
+    if(dictionary_get(d_ppl, keys[i]) != NULL){
+      temp = (dictionary_t*)dictionary_get(d_ppl, keys[i]);
+      places_keys = (char**)dictionary_keys(temp);
+      body = join_strings((const char* const*)places_keys, '\n');
+      full_body = append_strings(full_body, body, NULL);
+    }
+  }
+
+  len = strlen(full_body);
+
+  /* Send response headers to client */
+  header = ok_header(len, "text/plain; charset=utf-8");
+  Rio_writen(fd, header, strlen(header));
+  printf("Response headers:\n");
+  printf("%s", header);
+
+  free(header);
+
+  /* Send response body to client */
+  Rio_writen(fd, full_body, len);
+
+  free(full_body);
+}
+
+
 static void serve_reset(int fd)
 {
   dictionary_free(d_ppl);
   d_ppl = make_dictionary(COMPARE_CASE_SENS, free);
   serve_counts(fd);
 }
-
-
 
 static void serve_pin(int fd, dictionary_t *query)
 {
@@ -451,4 +546,20 @@ static void print_stringdictionary(dictionary_t *d)
 
   free(keys);
 }
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
 
