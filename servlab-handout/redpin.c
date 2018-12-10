@@ -47,6 +47,9 @@ int places_count = 0;
 
 char* current_serv_port; 
 
+sem_t thread;
+sem_t dict_sem;
+
 int main(int argc, char **argv) 
 {
   int listenfd, connfd;
@@ -54,6 +57,9 @@ int main(int argc, char **argv)
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
   current_serv_port = argv[1];
+
+  Sem_init(&thread, 0, 1);
+  Sem_init(&dict_sem, 0, 1);
 
   d_ppl = make_dictionary(COMPARE_CASE_SENS, (free_proc_t)dictionary_free );
   d_plcs = make_dictionary(COMPARE_CASE_SENS, (free_proc_t)dictionary_free );
@@ -75,9 +81,17 @@ int main(int argc, char **argv)
      do want to report errors. */
   exit_on_error(0);
 
+/*
+sem_t
+Sem_init(sem, ps_share, value)
+P(sem)  lock()
+V(sem) unlock()
+*/
+
   /* Also, don't stop on broken connections: */
   /*In the case of a broken pipe which wasn't closed on one end, no error is thrown*/
   Signal(SIGPIPE, SIG_IGN);
+
 
   while (1) {
     clientlen = sizeof(clientaddr);
@@ -91,8 +105,11 @@ int main(int argc, char **argv)
       pthread_t t1;
       int* connfd_p = malloc(sizeof(int));
       *connfd_p = connfd;
-      Pthread_create(&t1, NULL, doit_thread, connfd_p);
 
+
+      Pthread_create(&t1, NULL, doit_thread, connfd_p);
+      P(&thread);
+      Pthread_detach(t1);
       /*Close(connfd); */ //old
     }
   }
@@ -104,6 +121,7 @@ void *doit_thread(void* connfd_p){
   doit(connfd);
   Close(connfd);
   return NULL;
+
 }
 
 /*
@@ -111,6 +129,8 @@ void *doit_thread(void* connfd_p){
  */
 void doit(int fd) 
 {
+
+  V(&thread);
   char buf[MAXLINE], *method, *uri, *version;
   rio_t rio;
   dictionary_t *headers, *query;
@@ -152,7 +172,7 @@ void doit(int fd)
 
       //detect_str(query, "alice");
       /* For debugging, print the dictionary */
-
+      P(&dict_sem);
       if(starts_with("/counts", uri))           {if(debug_on)printf("counts\n"); serve_counts(fd);}
       else if(starts_with("/reset", uri))       {if(debug_on)printf("reset\n"); serve_reset(fd);}
       else if(starts_with("/people", uri))      {if(debug_on)printf("people\n"); serve_people(fd, query);}      
@@ -162,6 +182,7 @@ void doit(int fd)
       else if(starts_with("/copy", uri))        {if(debug_on)printf("copy\n"); serve_copy(fd, query);}      
       else if(starts_with("/print_all", uri))   {if(debug_on)printf("print_all\n"); serve_print_all(fd, query);}            
       else                                      {if(debug_on)printf("ERROR\n"); clienterror(fd, "?", "400", "BAD", "REALLY BAD");}
+      V(&dict_sem);
 
       /*
       void clienterror(int fd, char *cause, char *errnum, 
@@ -647,6 +668,7 @@ static void print_stringdictionary(dictionary_t *d)
 
 static void serve_copy(int fd, dictionary_t *query)
 {
+
   char *hostname;
   char *portno;
   char* target_str;
