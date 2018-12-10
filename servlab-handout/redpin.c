@@ -161,7 +161,13 @@ void doit(int fd)
       else if(starts_with("/unpin", uri))       {if(debug_on)printf("unpin\n"); serve_unpin(fd, query);}      
       else if(starts_with("/copy", uri))        {if(debug_on)printf("copy\n"); serve_copy(fd, query);}      
       else if(starts_with("/print_all", uri))   {if(debug_on)printf("print_all\n"); serve_print_all(fd, query);}            
-      else                                      {if(debug_on)printf("ERROR\n"); /*serve_request(fd, query);*/}
+      else                                      {if(debug_on)printf("ERROR\n"); clienterror(fd, "?", "400", "BAD", "REALLY BAD");}
+
+      /*
+      void clienterror(int fd, char *cause, char *errnum, 
+     char *shortmsg, char *longmsg) 
+{
+ */
 
       /* You'll want to handle different queries here,
          but the intial implementation always returns
@@ -204,7 +210,7 @@ void print_inner(dictionary_t* d)
   printf("PRINT INNER\n");
   const char** keys = dictionary_keys(d);
   dictionary_t* tmp;
-  const char** inner_keys;
+  const char** inner_keys = NULL;
   int i;
   int k;
   for(i = 0; keys[i] != NULL; i++){
@@ -215,8 +221,10 @@ void print_inner(dictionary_t* d)
       printf("\t%s\n", inner_keys[k]);
   }
 
-  free(inner_keys);
-  free(keys);
+  if(inner_keys)
+    free(inner_keys);
+  if(keys)
+    free(keys);
 
 }
 
@@ -309,7 +317,7 @@ static void serve_people(int fd, dictionary_t *query)
   size_t len;
   char *body, *header;
   char* place;
-  const char** people_arr;
+  const char** people_arr = NULL;
 
   place = dictionary_get(query, "place");
   printf("place assigned\n");
@@ -325,7 +333,9 @@ static void serve_people(int fd, dictionary_t *query)
     body = join_strings(people_arr, '\n');
   }
 
-  free(people_arr);
+  if(people_arr)
+    free(people_arr);
+
   len = strlen(body);
   /* Send response headers to client */
   header = ok_header(len, "text/plain; charset=utf-8");
@@ -394,14 +404,59 @@ static void serve_reset(int fd)
 static void serve_pin(int fd, dictionary_t *query)
 {
 
+
+
+
   int i = 0;
+  char* people_dict;
+  char** people_arr;
 
-  char* people_dict = dictionary_get(query, "people");
-  char** people_arr = split_string((const char*)people_dict, '\n');
+
+  char* places_dict;
+  char** places_arr;
 
 
-  char* places_dict = dictionary_get(query, "places");
-  char** places_arr = split_string((const char*)places_dict, '\n');  
+  if(dictionary_get(query, "people")){
+    people_dict = dictionary_get(query, "people");
+    people_arr = split_string((const char*)people_dict, '\n');
+  }else{
+    clienterror(fd, "?","400", "Bad Request", "people on pin");
+    return;
+  }
+
+
+
+  if(dictionary_get(query, "places")){
+    places_dict = dictionary_get(query, "places");
+    places_arr = split_string((const char*)places_dict, '\n');  
+  } else{
+    clienterror(fd, "?","400", "Bad Request", "places on pin");
+    return;
+  }  
+
+
+
+/*
+  char **people_arr, **places_arr;  
+
+  char *people = dictionary_get(query, "people");
+  if (people){
+    people_arr = split_string(people, '\n');
+  }
+
+  char *places = dictionary_get(query, "places");
+  if (places){
+    places_arr = split_string(people, '\n');
+  }
+  else{
+    clienterror(fd, "?","400", "Bad Request", "places on pin\n");
+    return;
+  }
+  */
+
+
+
+
 
   dictionary_t* tmp_prsn_dict;
   dictionary_t* tmp_plcs_dict;
@@ -458,6 +513,9 @@ static void serve_pin(int fd, dictionary_t *query)
   //free(body);
 }
 
+
+
+
 static void serve_unpin(int fd, dictionary_t *query)
 {
 
@@ -466,13 +524,27 @@ static void serve_unpin(int fd, dictionary_t *query)
   
   int i = 0;
 
-  char* people_dict = dictionary_get(query, "people");
-  char** people_arr = split_string((const char*)people_dict, '\n');
+  char* people_dict;
+  char** people_arr;
 
-  char* places_dict = dictionary_get(query, "places");
-  char** places_arr = split_string((const char*)places_dict, '\n');  
+  char* places_dict;
+  char** places_arr;
 
-  printf("BEFORE\n");
+  if(dictionary_get(query, "people")){
+    people_dict = dictionary_get(query, "people");
+    people_arr = split_string((const char*)people_dict, '\n');
+  }else{
+      clienterror(fd, "?","400", "Bad Request", "people on unpin");
+      return;
+  }  
+
+  if(dictionary_get(query, "places")){
+    places_dict = dictionary_get(query, "places");
+    places_arr = split_string((const char*)places_dict, '\n');  
+  }else{
+      clienterror(fd, "?","400", "Bad Request", "person on pin");
+      return;
+  }
 
   print_stringdictionary(d_ppl);
   print_stringdictionary(d_plcs);  
@@ -515,7 +587,6 @@ static void serve_unpin(int fd, dictionary_t *query)
   free(places_arr);
   //free(places_dict);
 
-  printf("AFTER\n");  
 
   print_stringdictionary(d_ppl);
   print_stringdictionary(d_plcs);  
@@ -576,8 +647,35 @@ static void print_stringdictionary(dictionary_t *d)
 
 static void serve_copy(int fd, dictionary_t *query)
 {
-  char *hostname = dictionary_get(query, "host");
-  char *portno = dictionary_get(query, "port");
+  char *hostname;
+  char *portno;
+  char* target_str;
+
+  if(dictionary_get(query, "host")){
+    hostname = dictionary_get(query,"host");
+  }
+  else{
+    clienterror(fd, "?","400", "Bad Request", "host on cpy");
+    return;
+  }
+
+
+  if(dictionary_get(query, "port")){
+    portno = dictionary_get(query,"port");
+  }
+  else{
+    clienterror(fd, "?","400", "Bad Request", "port on cpy");
+    return;
+  }
+
+  
+  if(dictionary_get(query, "as")){
+    target_str = dictionary_get(query,"as");
+  }
+  else{
+    clienterror(fd, "?","400", "Bad Request", "as on cpy");
+    return;
+  }
 
 
   int is_place = 0;
@@ -628,63 +726,81 @@ static void serve_copy(int fd, dictionary_t *query)
     //GET the person with places to be transfered
 
     char* person_with_places = dictionary_get(query, "person");
-    char* place_with_people = dictionary_get(query, "place");    
-    char* target_person = NULL;
-    char* target_place = NULL;
+    char* place_with_people = dictionary_get(query, "place");   
+    char* target_person = target_str;
+    char* target_place = target_str;
+    dictionary_t* new_tar_dict;
+
+
     //char* lcl_to_rmt_header = NULL;
     int i;
-    const char** ppl_keys = NULL;
-    const char** plc_keys = NULL;
-    dictionary_t* new_plc_prsn = NULL;
+    const char** persons_places_keys = NULL;
+    const char** places_people_keys = NULL;
+    const char** tar_keys = NULL;
 
-    printf("4\n");  
+
+
+    new_tar_dict = make_dictionary(COMPARE_CASE_SENS, NULL);
+
+    printf("1\n");
 
     if(is_place)
     {
-
-      printf("4 is place\n");        
-      target_place = dictionary_get(query,"as");    
-      if(dictionary_get(d_plcs, target_place) != NULL){
-        ppl_keys = dictionary_keys((dictionary_t*)dictionary_get(d_plcs,place_with_people));
-        for(i = 0; ppl_keys[i] != NULL; ++i)
-          dictionary_set((dictionary_t*)dictionary_get(d_plcs, target_place), ppl_keys[i], NULL);
-        free(ppl_keys);        
-      }else{
-        new_plc_prsn = make_dictionary(COMPARE_CASE_SENS, (free_proc_t)dictionary_free);
-        ppl_keys = dictionary_keys((dictionary_t*)dictionary_get(d_plcs,place_with_people));        
-        for(i = 0; ppl_keys[i] != NULL; ++i)
-          dictionary_set(new_plc_prsn, ppl_keys[i], NULL);
-        dictionary_set(d_plcs, target_place, new_plc_prsn);
-        free(ppl_keys);        
+      printf("10\n");      
+      places_people_keys = dictionary_keys(dictionary_get(d_plcs, place_with_people));
+      printf("11\n");
+      for(i = 0; places_people_keys[i] != NULL; i++){
+        dictionary_set(new_tar_dict, places_people_keys[i], NULL);
+        printf("12\n");
+        dictionary_set(dictionary_get(d_ppl, places_people_keys[i]),target_place, NULL);        
+        printf("13\n");        
       }
+
+        printf("14\n");
+      if(dictionary_has_key(d_plcs,target_place)){
+        printf("15\n");        
+        for(i = 0;  tar_keys[i] != NULL; i++){
+          dictionary_set(new_tar_dict, target_place, NULL);
+          printf("16\n");                  
+        }
+        printf("17\n");        
+      }
+      printf("18\n");              
+          
+      dictionary_set(d_plcs, target_place, new_tar_dict);
 
     }else{
 
-      printf("4 is person\n");              
-      target_person = (char*)dictionary_get(query,"as");
-      printf("4 target person-> %s\n", target_person);     
-      printf("4 person with places->%s\n", person_with_places);
-      dictionary_get(d_ppl, target_person);
-
-      if(dictionary_get(d_ppl, target_person) != NULL){
-        plc_keys = dictionary_keys((dictionary_t*)dictionary_get(d_ppl,person_with_places));
-        for(i = 0; plc_keys[i] != NULL; ++i){
-          dictionary_set((dictionary_t*)dictionary_get(d_ppl, target_person), plc_keys[i], NULL);
-        }          
-        free(plc_keys);        
-      }else{
-        new_plc_prsn = make_dictionary(COMPARE_CASE_SENS, (free_proc_t)dictionary_free);
-        plc_keys = dictionary_keys((dictionary_t*)dictionary_get(d_ppl, person_with_places));        
-        if(plc_keys == NULL)
-        for(i = 0; plc_keys[i] != NULL; ++i){
-          dictionary_set(new_plc_prsn, plc_keys[i], NULL);
-        }
-        dictionary_set(d_ppl, target_person, new_plc_prsn);
-        free(plc_keys);
+      printf("a\n");
+      persons_places_keys = dictionary_keys(dictionary_get(d_ppl, person_with_places));
+      printf("b\n");      
+      for(i = 0; persons_places_keys[i] != NULL; i++){
+        printf("b2\n");              
+        dictionary_set(new_tar_dict, persons_places_keys[i], NULL);
+        printf("c\n");              
+        dictionary_set(dictionary_get(d_plcs, persons_places_keys[i]), target_person, NULL);        
+        printf("d\n");                      
       }
-    }
-    //lcl_to_rmt_header = get_people_header(NULL, NULL, NULL);
 
+        printf("f\n");                      
+      if(dictionary_has_key(d_ppl,target_person)){
+        for(i = 0;  tar_keys[i] != NULL; i++){
+        printf("g\n");                                
+          dictionary_set(new_tar_dict, target_person, NULL);
+        printf("h\n");                                
+        }
+      }
+         
+        printf("i\n");                                
+        dictionary_set(d_ppl, target_person, new_tar_dict);
+        printf("j\n");                            
+
+    }
+
+    free(tar_keys);
+
+    //lcl_to_rmt_header = get_people_header(NULL, NULL, NULL);
+    serve_counts(fd);
 
   }
   // if not the current server...
@@ -692,8 +808,8 @@ static void serve_copy(int fd, dictionary_t *query)
 
     char* person_with_places_rem = dictionary_get(query, "person");
     char* place_with_people_rem = dictionary_get(query, "place");
-    char* target_person_rem = dictionary_get(query, "as");
-    char* target_place_rem = dictionary_get(query, "as");
+    char* target_person_rem = target_str;
+    char* target_place_rem = target_str;
 
     char *header;
 
@@ -746,7 +862,7 @@ static void serve_copy(int fd, dictionary_t *query)
       headers = read_requesthdrs(&rio);
 
       len_str = dictionary_get(headers, "Content-Length");
-      len = (len_str ? atoi(len_str) : 0);
+      len = (len_str ? atoi((const char*)len_str) : 0);
 
       buffer = malloc(len+1);
 
@@ -758,17 +874,18 @@ static void serve_copy(int fd, dictionary_t *query)
       // GET BOBS PLACES
       char** persons_places = split_string(buffer, '\n');
       char** places_people = split_string(buffer, '\n');
-      free(buffer);
+
       int y;
       dictionary_t* new_target_dict;
       dictionary_t* new_person_or_place;
-      char** targets_keys;
+      const char** targets_keys;
 
       new_target_dict = make_dictionary(COMPARE_CASE_SENS, NULL);       
 
       if(is_place)
       {
         for(y = 0; places_people[y] != NULL; y++){
+          printf("\n\t&&& places_people[%i] =  %s\n", y, places_people[y]);
           dictionary_set(new_target_dict, places_people[y], NULL); //set target as place y
           if(!dictionary_has_key(d_ppl, places_people[y])){        //if people dictionary doesnt have place y's 
             new_person_or_place = make_dictionary(COMPARE_CASE_SENS, NULL);
@@ -779,8 +896,11 @@ static void serve_copy(int fd, dictionary_t *query)
 
         if(dictionary_has_key(d_ppl, target_person_rem)){
           targets_keys = dictionary_keys(dictionary_get(d_plcs, target_place_rem));
-          for(y = 0; targets_keys[y] != NULL; y++)
+          for(y = 0; targets_keys[y] != NULL; y++){
+            printf("\n\t*** places_people[%i] =  %s\n", y, targets_keys[y]);              
             dictionary_set(new_target_dict, targets_keys[y], NULL);
+
+          }
         }
         dictionary_set(d_plcs, target_place_rem, new_target_dict);
 
@@ -788,7 +908,7 @@ static void serve_copy(int fd, dictionary_t *query)
       }else
       {
         for(y = 0; persons_places[y] != NULL; y++){
-          serve_print_all(fd, query);
+          printf("\n\t&&& places_people[%i] =  %s\n", y, places_people[y]);          
           dictionary_set(new_target_dict, persons_places[y], NULL);
           if(!dictionary_has_key(d_plcs, persons_places[y])){
             new_person_or_place = make_dictionary(COMPARE_CASE_SENS, NULL);
@@ -797,18 +917,21 @@ static void serve_copy(int fd, dictionary_t *query)
           }
         }
 
-        if(dictionary_has_key(d_ppl, target_person_rem)){
+        if(dictionary_has_key(d_plcs, target_person_rem)){
           targets_keys = dictionary_keys(dictionary_get(d_ppl, target_person_rem));
-          for(y = 0; targets_keys[y] != NULL; y++)
+          for(y = 0; targets_keys[y] != NULL; y++){
+            printf("\n\t*** places_people[%i] =  %s\n", y, targets_keys[y]);                          
             dictionary_set(new_target_dict, targets_keys[y], NULL);
+          }
         }
         dictionary_set(d_ppl, target_person_rem, new_target_dict);
 
       }
 
+
       //  /Clean up
       free(len_str);
-      free(buffer);
+      //free(buffer);
       free(method); 
       free(uri);
       free(version);    
@@ -818,6 +941,7 @@ static void serve_copy(int fd, dictionary_t *query)
 
     }
   }
+      printf("done with copy \n");  
 }
 
 
