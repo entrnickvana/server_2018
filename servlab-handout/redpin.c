@@ -231,21 +231,19 @@ void print_inner(dictionary_t* d)
   printf("PRINT INNER\n");
   const char** keys = dictionary_keys(d);
   dictionary_t* tmp;
-  const char** inner_keys = NULL;
+
   int i;
   int k;
   for(i = 0; keys[i] != NULL; i++){
     printf("OUTER KEY %s HAS:\n", keys[i]);
     tmp = (dictionary_t*)dictionary_get(d, keys[i]);
-    inner_keys = dictionary_keys(tmp);
+    const char** inner_keys = dictionary_keys(tmp);
     for(k = 0; inner_keys[k] != NULL; k++)
       printf("\t%s\n", inner_keys[k]);
+    free(inner_keys);
   }
 
-  if(inner_keys)
-    free(inner_keys);
-  if(keys)
-    free(keys);
+  free(keys);
 
 }
 
@@ -417,6 +415,7 @@ static void serve_places(int fd, dictionary_t *query)
 static void serve_reset(int fd)
 {
   dictionary_free(d_ppl);
+  dictionary_free(d_plcs);  
   d_ppl = make_dictionary(COMPARE_CASE_SENS, (free_proc_t)dictionary_free);
   d_plcs = make_dictionary(COMPARE_CASE_SENS, (free_proc_t)dictionary_free);
   serve_counts(fd);
@@ -424,9 +423,6 @@ static void serve_reset(int fd)
 
 static void serve_pin(int fd, dictionary_t *query)
 {
-
-
-
 
   int i = 0;
   char* people_dict;
@@ -953,7 +949,8 @@ static void serve_copy(int fd, dictionary_t *query)
 
       //  /Clean up
       free(len_str);
-      //free(buffer);
+      //free(header);
+      free(buffer);
       free(method); 
       free(uri);
       free(version);    
@@ -986,7 +983,7 @@ static char *get_person_header(char* place, char* host, char* port) {
 static char *get_place_header(char* person, char* host, char* port) {
   char *header;
 
-  header = append_strings("GET /places?persone=", person, " HTTP/1.1\r\n",
+  header = append_strings("GET /places?person=", person, " HTTP/1.1\r\n",
                           "Host: ", host, ":", port, "\r\n",
                           "User-Agent: Redpin Web Server (net/http-client)\r\n",
                           "Content-Length: 0\r\n\r\n",
@@ -995,6 +992,21 @@ static char *get_place_header(char* person, char* host, char* port) {
 
   return header;
 }
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
 
 
 
